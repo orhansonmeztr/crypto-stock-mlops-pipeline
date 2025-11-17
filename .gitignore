@@ -49,6 +49,7 @@ mlartifacts/
 # DVC
 .dvc/tmp
 .dvc/cache
+.dvc/config
 
 # Model artifacts
 *.h5

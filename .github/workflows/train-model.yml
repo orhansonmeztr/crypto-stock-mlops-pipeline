@@ -1,0 +1,46 @@
+name: CD - Model Training Pipeline
+
+on:
+  workflow_dispatch:  # Allows manual triggering from the GitHub UI
+
+jobs:
+  train-and-log-model:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv and all project dependencies
+        run: |
+          pip install uv
+          uv pip install .  # Installs everything from pyproject.toml including torch, xgboost etc.
+
+      - name: Setup Google Drive and Pull Data with DVC
+        # This step uses the GitHub secrets to authenticate with Google Drive
+        env:
+          GDRIVE_CREDENTIALS_DATA: ${{ secrets.GDRIVE_CREDENTIALS_DATA }}
+        run: |
+          # Create the credentials file that DVC expects
+          mkdir -p .dvc/tmp
+          echo "$GDRIVE_CREDENTIALS_DATA" > .dvc/tmp/gdrive-user-credentials.json
+
+          # Install DVC and its Google Drive dependency
+          uv pip install dvc[gdrive]
+
+          # Pull the data
+          dvc pull -f
+
+      - name: Run Model Training Script
+        # This step uses the Databricks secrets to connect to MLflow
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DATABRICKS_EXPERIMENT_PATH: ${{ secrets.DATABRICKS_EXPERIMENT_PATH }}
+        run: |
+          python src/models/train_model.py

@@ -1,3 +1,5 @@
+# .github/workflows/ci-pipeline.yml
+
 name: CI - Code Quality Checks
 
 on:
@@ -21,7 +23,7 @@ jobs:
 
       - name: Install dependencies for pre-commit
         run: |
-          pip install pre-commit pytest
+          pip install pre-commit pytest pytest-cov
 
       - name: Run pre-commit hooks
         run: |

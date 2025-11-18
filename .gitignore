@@ -57,7 +57,6 @@ mlartifacts/
 *.joblib
 *.pth
 *.onnx
-models/
 
 # Data files (DVC will track these)
 data/raw

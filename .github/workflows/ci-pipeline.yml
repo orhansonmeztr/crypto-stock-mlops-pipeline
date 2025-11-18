@@ -19,16 +19,26 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Create uv virtual environment
-        run: uv venv
-
-      - name: Install dependencies using uv
+      - name: Install uv and create uv venv, install deps
+        shell: bash
         run: |
+          # ensure pip is modern
           python -m pip install --upgrade pip
-          pip install uv
-          uv pip install .
-          uv pip install pre-commit
 
-      - name: Run pre-commit hooks
+          # install uv into the runner's Python environment so we can invoke it as a module
+          python -m pip install uv
+
+          # create a uv-managed virtual environment
+          python -m uv venv
+
+          # install your project and pre-commit into the uv venv
+          python -m uv pip install .
+
+          # install pre-commit into the uv venv (if your pyproject has it as dev-dependency you can omit)
+          python -m uv pip install pre-commit
+
+      - name: Run pre-commit hooks inside uv venv
+        shell: bash
         run: |
-          pre-commit run --all-files
+          # run pre-commit inside the uv venv (uv run executes the command in the uv-managed environment)
+          python -m uv run pre-commit run --all-files

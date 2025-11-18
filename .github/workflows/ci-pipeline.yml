@@ -19,7 +19,10 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install and run pre-commit
+      - name: Install dependencies for pre-commit
         run: |
-          pip install pre-commit
+          pip install pre-commit pytest
+
+      - name: Run pre-commit hooks
+        run: |
           pre-commit run --all-files

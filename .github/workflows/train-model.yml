@@ -1,7 +1,7 @@
 name: CD - Model Training Pipeline
 
 on:
-  workflow_dispatch:  # Allows manual triggering from the GitHub UI
+  workflow_dispatch:
 
 jobs:
   train-and-log-model:
@@ -22,18 +22,18 @@ jobs:
           uv venv
           uv pip install .
 
-      - name: Setup Google Drive and Pull Data with DVC
+      - name: Create DVC credentials file from secret
         env:
           GDRIVE_CREDENTIALS_DATA: ${{ secrets.GDRIVE_CREDENTIALS_DATA }}
         run: |
-          # Create the credentials file that DVC expects
           mkdir -p .dvc/tmp
-          echo "$GDRIVE_CREDENTIALS_DATA" > .dvc/tmp/gdrive-user-credentials.json
+          cat << EOF > .dvc/tmp/gdrive-user-credentials.json
+          ${GDRIVE_CREDENTIALS_DATA}
+          EOF
 
-          # Install DVC and its Google Drive dependency into the same venv
+      - name: Pull Data with DVC
+        run: |
           uv pip install dvc[gdrive]
-
-          # Pull the data, running the command inside the venv
           uv run dvc pull -f
 
       - name: Run Model Training Script
@@ -42,5 +42,4 @@ jobs:
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           DATABRICKS_EXPERIMENT_PATH: ${{ secrets.DATABRICKS_EXPERIMENT_PATH }}
         run: |
-          # Run the training script inside the venv
           uv run python src/models/train_model.py

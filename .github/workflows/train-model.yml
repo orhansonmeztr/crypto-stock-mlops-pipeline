@@ -41,5 +41,7 @@ jobs:
           DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
           DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
           DATABRICKS_EXPERIMENT_PATH: ${{ secrets.DATABRICKS_EXPERIMENT_PATH }}
+          # The critical variable that mlflow.set_tracking_uri() expects
+          MLFLOW_TRACKING_URI: "databricks"
         run: |
           uv run python src/models/train_model.py

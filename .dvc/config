@@ -1,5 +1,2 @@
-[core]
-    remote = gdrive
-['remote "gdrive"']
-    url = gdrive://1kLlah4i7OJIekEVkwdF_kBWc7v_SYYh_
-    gdrive_service_account_json_file_path = .dvc/tmp/gdrive-user-credentials.json
+['remote "s3-storage"']
+    url = s3://mlops-project-dvc-storage/crypto-mlops-project-dvc-storage

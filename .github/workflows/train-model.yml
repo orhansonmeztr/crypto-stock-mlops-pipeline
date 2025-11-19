@@ -21,23 +21,23 @@ jobs:
           pip install uv
           uv venv
           uv pip install .
-          uv pip install dvc[gdrive]
+          uv pip install dvc[s3]
 
-      - name: Create DVC credentials file
+      - name: Configure AWS Credentials and Pull Data from S3
         env:
-          GDRIVE_CREDENTIALS_DATA: ${{ secrets.GDRIVE_CREDENTIALS_DATA }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          S3_DVC_REMOTE_URL: ${{ secrets.S3_DVC_REMOTE_URL }}
         run: |
-          mkdir -p .dvc/tmp
-          echo "${GDRIVE_CREDENTIALS_DATA}" > .dvc/tmp/gdrive-user-credentials.json
+          # Use the full URL from secrets to add the remote
+          uv run dvc remote add s3-storage ${S3_DVC_REMOTE_URL}
 
-      - name: Authenticate DVC and Pull Data
-        run: |
-          # This is the final, magic command.
-          # It forces DVC to treat our user credentials as a non-interactive service account key.
-          uv run dvc remote modify gdrive gdrive_service_account_json_file_path .dvc/tmp/gdrive-user-credentials.json
+          # Configure credentials for this remote
+          uv run dvc remote modify s3-storage --local access_key_id ${AWS_ACCESS_KEY_ID}
+          uv run dvc remote modify s3-storage --local secret_access_key ${AWS_SECRET_ACCESS_KEY}
 
-          # Now, pull the data. DVC will not ask for interactive login.
-          uv run dvc pull -f
+          # Pull data from the correctly configured remote
+          uv run dvc pull -r s3-storage
 
       - name: Run Model Training Script
         env:

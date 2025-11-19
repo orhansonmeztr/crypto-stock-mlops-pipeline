@@ -16,26 +16,27 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Install dependencies into a new uv virtual environment
+      - name: Install dependencies
         run: |
           pip install uv
           uv venv
           uv pip install .
+          uv pip install dvc[gdrive]
 
-      - name: Create DVC credentials file from secret
+      - name: Create DVC credentials file
         env:
           GDRIVE_CREDENTIALS_DATA: ${{ secrets.GDRIVE_CREDENTIALS_DATA }}
         run: |
           mkdir -p .dvc/tmp
-          cat << EOF > .dvc/tmp/gdrive-user-credentials.json
-          ${GDRIVE_CREDENTIALS_DATA}
-          EOF
+          echo "${GDRIVE_CREDENTIALS_DATA}" > .dvc/tmp/gdrive-user-credentials.json
 
-      - name: Pull Data with DVC in Headless Mode
+      - name: Authenticate DVC and Pull Data
         run: |
-          uv pip install dvc[gdrive]
-          uv run dvc config core.no_scm true
-          uv run dvc config core.interactive false
+          # This is the final, magic command.
+          # It forces DVC to treat our user credentials as a non-interactive service account key.
+          uv run dvc remote modify gdrive gdrive_service_account_json_file_path .dvc/tmp/gdrive-user-credentials.json
+
+          # Now, pull the data. DVC will not ask for interactive login.
           uv run dvc pull -f
 
       - name: Run Model Training Script

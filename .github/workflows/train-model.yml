@@ -23,21 +23,19 @@ jobs:
           uv pip install .
 
       - name: Create DVC credentials file from secret
-        uses: jakejarvis/create-file-action@v4
-        with:
-          file-name: .dvc/tmp/gdrive-user-credentials.json
-          content: ${{ secrets.GDRIVE_CREDENTIALS_DATA }}
+        env:
+          GDRIVE_CREDENTIALS_DATA: ${{ secrets.GDRIVE_CREDENTIALS_DATA }}
+        run: |
+          mkdir -p .dvc/tmp
+          cat << EOF > .dvc/tmp/gdrive-user-credentials.json
+          ${GDRIVE_CREDENTIALS_DATA}
+          EOF
 
-      # --- REVISION: Force DVC to use a non-interactive mode ---
       - name: Pull Data with DVC in Headless Mode
         run: |
           uv pip install dvc[gdrive]
-
-          # This is the magic command: It tells DVC globally to never ask for user input.
           uv run dvc config core.no_scm true
           uv run dvc config core.interactive false
-
-          # Now, pull the data
           uv run dvc pull -f
 
       - name: Run Model Training Script

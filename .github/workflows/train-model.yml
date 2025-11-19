@@ -28,7 +28,7 @@ jobs:
           file-name: .dvc/tmp/gdrive-user-credentials.json
           content: ${{ secrets.GDRIVE_CREDENTIALS_DATA }}
 
-
+      # --- REVISION: Force DVC to use a non-interactive mode ---
       - name: Pull Data with DVC in Headless Mode
         run: |
           uv pip install dvc[gdrive]

@@ -23,20 +23,17 @@ jobs:
           uv pip install .
           uv pip install dvc[s3]
 
-      - name: Configure AWS Credentials and Pull Data from S3
+      - name: Configure DVC and Pull Data
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          S3_DVC_REMOTE_URL: ${{ secrets.S3_DVC_REMOTE_URL }}
         run: |
-          # Use the full URL from secrets to add the remote
-          uv run dvc remote add s3-storage ${S3_DVC_REMOTE_URL}
-
-          # Configure credentials for this remote
+          # The remote 's3-storage' already exists from the .dvc/config file.
+          # We only need to modify it with the credentials.
           uv run dvc remote modify s3-storage --local access_key_id ${AWS_ACCESS_KEY_ID}
           uv run dvc remote modify s3-storage --local secret_access_key ${AWS_SECRET_ACCESS_KEY}
 
-          # Pull data from the correctly configured remote
+          # Now, pull the data from the configured remote
           uv run dvc pull -r s3-storage
 
       - name: Run Model Training Script

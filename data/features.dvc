@@ -1,6 +1,5 @@
 outs:
-- md5: c2b8879475f9ca890208ef8416ab1865.dir
-  size: 227490
+- md5: 6b20a39de737daf01d5c575c3a5ce7c2.dir
   nfiles: 2
   hash: md5
   path: features

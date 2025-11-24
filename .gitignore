@@ -58,10 +58,15 @@ mlartifacts/
 *.pth
 *.onnx
 
-# Data files (DVC will track these)
-data/raw
-data/processed
-data/features
+# Data files (Ignore CSVs but keep DVC files)
+data/features/*
+!data/features/*.dvc
+data/predictions/*
+!data/predictions/*.dvc
+data/processed/*
+!data/processed/*.dvc
+data/raw/*
+!data/raw/*.dvc
 
 # Logs
 *.log

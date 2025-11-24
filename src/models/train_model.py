@@ -2,11 +2,10 @@ import os
 import sys
 from pathlib import Path
 
-# Fix Import Path
 project_root = Path(__file__).resolve().parents[2]
 sys.path.append(str(project_root))
 
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # 0=All, 1=Filter INFO, 2=Filter WARNING, 3=Filter ERROR
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
 import tensorflow as tf
 
 tf.get_logger().setLevel("ERROR")
@@ -20,7 +19,7 @@ import numpy as np
 import pandas as pd
 import yaml
 from dotenv import load_dotenv
-from mlflow.models.signature import infer_signature  # Eklendi
+from mlflow.models.signature import infer_signature
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from xgboost import XGBRegressor
 
@@ -40,6 +39,10 @@ def sanitize_artifact_name(name: str) -> str:
     for char in [".", ":", "/", "%", '"', "'", " "]:
         name = name.replace(char, "_")
     return name
+
+
+# --- GLOBAL LIST TO STORE FORECASTS ---
+latest_forecasts = []
 
 
 def train_hybrid_model_for_asset(df_asset: pd.DataFrame, asset_name: str, config: dict):
@@ -78,13 +81,12 @@ def train_hybrid_model_for_asset(df_asset: pd.DataFrame, asset_name: str, config
 
         safe_name = sanitize_artifact_name(asset_name)
 
-        # FIX: Add Signature to Silence Warning
         signature = infer_signature(X_lstm_train, model_lstm.predict(X_lstm_train, verbose=0))
         mlflow.tensorflow.log_model(
             model_lstm, artifact_path=f"model_lstm_{safe_name}", signature=signature
         )
 
-        lstm_preds_scaled = model_lstm.predict(X_lstm, verbose=0)  # verbose=0 eklendi
+        lstm_preds_scaled = model_lstm.predict(X_lstm, verbose=0)
         lstm_preds = scaler.inverse_transform(lstm_preds_scaled)
 
         logging.info(f"LSTM training finished for {asset_name}")
@@ -125,17 +127,37 @@ def train_hybrid_model_for_asset(df_asset: pd.DataFrame, asset_name: str, config
         mlflow.log_metric("mae", mae)
         mlflow.log_metric("rmse", rmse)
 
-        # FIX: Add Signature for XGBoost too
         signature_xgb = infer_signature(X_train, predictions)
         mlflow.xgboost.log_model(
             model_xgb, artifact_path=f"model_hybrid_{safe_name}", signature=signature_xgb
         )
 
+        # --- 3. Generate Future Forecast (Next Day) ---
+        # Use the very last data point to predict the 'next' unknown day
+        last_row = df_trimmed.iloc[[-1]]  # Last available data point
+        X_future = last_row[feature_cols]
+
+        forecast_price = model_xgb.predict(X_future)[0]
+        current_price = last_row["close"].values[0]
+
+        forecast_entry = {
+            "asset_name": asset_name,
+            "last_date": last_row.index[0],
+            "current_price": float(current_price),
+            "forecast_price": float(forecast_price),
+            "predicted_change_pct": float((forecast_price - current_price) / current_price * 100),
+        }
+        latest_forecasts.append(forecast_entry)
+        logging.info(
+            f"Forecast for {asset_name}: {forecast_price:.2f} (Change: {forecast_entry['predicted_change_pct']:.2f}%)"
+        )
+
 
 def main():
-    # ... (Geri kalan kısım tamamen aynı) ...
     features_path = project_root / "data" / "features" / "multi_asset_features.csv"
     config_path = project_root / "configs" / "training_config.yaml"
+    predictions_path = project_root / "data" / "predictions"
+    predictions_path.mkdir(exist_ok=True)
 
     mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
     if mlflow_tracking_uri:
@@ -160,6 +182,15 @@ def main():
                     logging.warning(f"Not enough data for {asset}, skipping.")
             except Exception as e:
                 logging.error(f"Failed to train {asset}: {e}")
+
+    # Save all forecasts to CSV
+    if latest_forecasts:
+        forecast_df = pd.DataFrame(latest_forecasts)
+        output_file = predictions_path / "latest_forecasts.csv"
+        forecast_df.to_csv(output_file, index=False)
+        logging.info(f"Saved latest forecasts to {output_file}")
+        print("\n--- LATEST FORECASTS ---")
+        print(forecast_df)
 
 
 if __name__ == "__main__":

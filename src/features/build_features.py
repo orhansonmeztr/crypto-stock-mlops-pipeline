@@ -2,85 +2,158 @@ import logging
 from pathlib import Path
 
 import pandas as pd
+import yaml
 
+# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-def create_time_series_features(df: pd.DataFrame, target_col: str, lags: int = 5) -> pd.DataFrame:
+def load_config(config_path: Path) -> dict:
     """
-    Creates time-series features like lags and time-based rolling window statistics.
+    Loads the YAML configuration file.
 
     Args:
-        df (pd.DataFrame): Input DataFrame, must have a DatetimeIndex.
-        target_col (str): The column to create features for (e.g., 'last' price).
-        lags (int): The number of past days to use for lag features.
+        config_path (Path): Path to the configuration file.
 
     Returns:
-        pd.DataFrame: DataFrame with new time-series features.
+        dict: Configuration dictionary.
     """
-    df_features = df.copy()
+    with open(config_path) as f:
+        return yaml.safe_load(f)
 
-    # Lag features for previous days
-    for i in range(1, lags + 1):
-        df_features[f"{target_col}_lag_{i}"] = df_features[target_col].shift(i)
 
-    rolling_windows = ["7D", "14D", "30D"]
-    for window in rolling_windows:
-        # We shift by 1 day to prevent data leakage from the current day
-        shifted_series = df_features[target_col].shift(1)
+def create_time_series_features(df: pd.DataFrame, target_col: str = "close") -> pd.DataFrame:
+    """
+    Generates technical indicators and time-series features.
 
-        df_features[f"{target_col}_roll_mean_{window}"] = shifted_series.rolling(
-            window=window
-        ).mean()
-        df_features[f"{target_col}_roll_std_{window}"] = shifted_series.rolling(window=window).std()
+    Args:
+        df (pd.DataFrame): Input dataframe with price data.
+        target_col (str): Name of the column containing the price (e.g., 'last', 'price_usd').
 
-    df_features["day_of_week"] = df_features.index.dayofweek
-    df_features["month"] = df_features.index.month
-    df_features["year"] = df_features.index.year
-    df_features["day_of_year"] = df_features.index.dayofyear
+    Returns:
+        pd.DataFrame: Dataframe with added features.
+    """
+    df_feat = df.copy()
 
+    # Rename target column to standard 'close' for consistency across assets
+    df_feat = df_feat.rename(columns={target_col: "close"})
+
+    # Return calculation
+    df_feat["return"] = df_feat["close"].pct_change()
+
+    # Moving Averages
+    df_feat["ma_7"] = df_feat["close"].rolling(window=7).mean()
+    df_feat["ma_30"] = df_feat["close"].rolling(window=30).mean()
+
+    # Volatility
+    df_feat["volatility_30"] = df_feat["close"].rolling(window=30).std()
+
+    # Lag features (t-1, t-2, ...)
+    for lag in [1, 2, 3, 7]:
+        df_feat[f"lag_{lag}"] = df_feat["close"].shift(lag)
+
+    return df_feat
+
+
+def process_asset(df: pd.DataFrame, asset_name: str, asset_type: str) -> pd.DataFrame:
+    """
+    Processes a single asset: filters data, resamples, and generates features.
+
+    Args:
+        df (pd.DataFrame): The complete dataframe containing multiple assets.
+        asset_name (str): Name of the asset to process (e.g., 'Bitcoin', 'Amazon.com').
+        asset_type (str): Type of asset ('stock' or 'crypto').
+
+    Returns:
+        pd.DataFrame: Processed dataframe with features and metadata, or empty if not found.
+    """
+    # Filter data for the specific asset
+    mask = df["name"] == asset_name
+    df_asset = df[mask].copy()
+
+    if df_asset.empty:
+        logging.warning(f"No data found for asset: {asset_name}")
+        return pd.DataFrame()
+
+    # Determine price column based on asset type
+    price_col = "last" if asset_type == "stock" else "price_usd"
+
+    # Resample to daily frequency and handle missing values
+    # Using 'last' (closing price) for resampling
+    daily_df = df_asset.set_index("timestamp")[price_col].resample("D").last().ffill()
+
+    # Generate features
+    df_features = create_time_series_features(daily_df.to_frame(), target_col=price_col)
+
+    # Create target variable (Next day's price)
+    df_features["target"] = df_features["close"].shift(-1)
+
+    # Add metadata
+    df_features["asset_name"] = asset_name
+    df_features["asset_type"] = asset_type
+
+    # Drop rows with NaN values (due to lags and shifting)
     df_features.dropna(inplace=True)
+
     return df_features
 
 
 def main():
-    """Main function to load, resample, build features, and save data."""
+    """
+    Main execution function for feature engineering pipeline.
+    """
+    # Define paths
     project_root = Path(__file__).resolve().parents[2]
     processed_data_path = project_root / "data" / "processed"
-    features_path = project_root / "data" / "features"
-    features_path.mkdir(parents=True, exist_ok=True)
+    features_data_path = project_root / "data" / "features"
+    config_path = project_root / "configs" / "training_config.yaml"
 
-    stock_file = processed_data_path / "stocks.csv"
-    if not stock_file.exists():
-        logging.error(f"Processed data not found at {stock_file}.")
-        return
+    # Ensure output directory exists
+    features_data_path.mkdir(parents=True, exist_ok=True)
 
-    logging.info(f"Loading data from {stock_file}...")
-    df = pd.read_csv(stock_file, parse_dates=["timestamp"])
-    df.set_index("timestamp", inplace=True)
-    df.sort_index(inplace=True)
+    # Load config
+    config = load_config(config_path)
 
-    df_single_asset = df[df["name"] == "Amazon.com"].copy()
-    if df_single_asset.empty:
-        logging.error("No data found for 'Amazon.com'.")
-        return
+    all_features_list = []
 
-    logging.info("Resampling data to daily frequency...")
-    daily_df = df_single_asset["last"].resample("D").last()  # Use last price of the day
-    daily_df = daily_df.ffill()  # Forward-fill weekends and holidays
+    # 1. Process Stocks
+    stocks_file = processed_data_path / "stocks.csv"
+    if stocks_file.exists():
+        logging.info("Loading stocks data...")
+        df_stocks = pd.read_csv(stocks_file, parse_dates=["timestamp"])
 
-    logging.info("Building features for 'Amazon.com'...")
-    df_features = create_time_series_features(daily_df.to_frame(), target_col="last")
+        for stock_name in config["assets"]["stocks"]:
+            logging.info(f"Processing Stock: {stock_name}")
+            df_feat = process_asset(df_stocks, stock_name, "stock")
+            if not df_feat.empty:
+                all_features_list.append(df_feat)
+    else:
+        logging.warning(f"Stocks file not found at {stocks_file}")
 
-    # Define the prediction target: the price 1 day ahead
-    df_features["target"] = df_features["last"].shift(-1)
-    df_features.dropna(inplace=True)
+    # 2. Process Cryptocurrencies
+    crypto_file = processed_data_path / "cryptocurrency.csv"
+    if crypto_file.exists():
+        logging.info("Loading cryptocurrency data...")
+        df_crypto = pd.read_csv(crypto_file, parse_dates=["timestamp"])
 
-    output_file = features_path / "amazon_daily_features.csv"
-    logging.info(f"Saving feature-engineered data to {output_file}...")
-    df_features.to_csv(output_file)
+        for crypto_name in config["assets"]["cryptos"]:
+            logging.info(f"Processing Crypto: {crypto_name}")
+            df_feat = process_asset(df_crypto, crypto_name, "crypto")
+            if not df_feat.empty:
+                all_features_list.append(df_feat)
+    else:
+        logging.warning(f"Cryptocurrency file not found at {crypto_file}")
 
-    logging.info(f"Feature engineering complete. Final shape: {df_features.shape}")
+    # 3. Combine and Save
+    if all_features_list:
+        final_df = pd.concat(all_features_list)
+        output_file = features_data_path / "multi_asset_features.csv"
+        final_df.to_csv(output_file)
+        logging.info(f"Successfully saved multi-asset features to {output_file}")
+        logging.info(f"Total shape: {final_df.shape}")
+        logging.info(f"Assets included: {final_df['asset_name'].unique()}")
+    else:
+        logging.error("No features generated. Check data files and configuration.")
 
 
 if __name__ == "__main__":

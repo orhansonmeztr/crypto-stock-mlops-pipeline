@@ -1,2 +1,4 @@
+[core]
+    remote = s3-storage
 ['remote "s3-storage"']
     url = s3://mlops-project-dvc-storage/crypto-mlops-project-dvc-storage

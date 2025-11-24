@@ -1,47 +1,46 @@
 name: CD - Model Training Pipeline
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Allows manual triggering from GitHub Actions UI
 
 jobs:
-  train-and-log-model:
+  train-and-log:
     runs-on: ubuntu-latest
+    env:
+      # Secrets managed in GitHub Repository Settings
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      DATABRICKS_EXPERIMENT_PATH: ${{ secrets.DATABRICKS_EXPERIMENT_PATH }}
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        version: "latest"
 
-      - name: Install dependencies
-        run: |
-          pip install uv
-          uv venv
-          uv pip install .
-          uv pip install dvc[s3]
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
 
-      - name: Configure DVC and Pull Data
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        run: |
-          # The remote 's3-storage' already exists from the .dvc/config file.
-          # We only need to modify it with the credentials.
-          uv run dvc remote modify s3-storage --local access_key_id ${AWS_ACCESS_KEY_ID}
-          uv run dvc remote modify s3-storage --local secret_access_key ${AWS_SECRET_ACCESS_KEY}
+    - name: Install dependencies
+      run: |
+        uv sync --frozen
 
-          # Now, pull the data from the configured remote
-          uv run dvc pull -r s3-storage
+    - name: Configure DVC and Pull Data
+      run: |
+        # Remote configuration 's3-storage' exists in .dvc/config
+        # DVC automatically uses the AWS environment variables for authentication
+        uv run dvc pull
 
-      - name: Run Model Training Script
-        env:
-          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-          DATABRICKS_EXPERIMENT_PATH: ${{ secrets.DATABRICKS_EXPERIMENT_PATH }}
-          # The critical variable that mlflow.set_tracking_uri() expects
-          MLFLOW_TRACKING_URI: "databricks"
-        run: |
-          uv run python src/models/train_model.py
+    - name: Run Model Training Script
+      run: |
+        export PYTHONPATH=$PYTHONPATH:.
+        uv run python src/models/train_model.py

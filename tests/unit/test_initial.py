@@ -1,45 +1,64 @@
-import os
-import tomllib
+import sys
+from pathlib import Path
 
-import pytest
+import numpy as np
+import pandas as pd
 
+# Add project root to sys.path so we can import src modules
+project_root = Path(__file__).resolve().parents[2]
+sys.path.append(str(project_root))
 
-def test_always_passes():
-    """
-    A placeholder test to ensure pytest finds and executes at least one test.
-    This can be removed or replaced as real tests are added to the project.
-    """
-    assert True, "This test should always pass."
-
-
-def test_project_has_readme():
-    """
-    Checks for the existence of a README.md file in the project's root directory.
-    """
-    assert os.path.isfile("README.md"), "The project must contain a README.md file."
+from src.features.build_features import create_time_series_features
+from src.models.lstm_model import prepare_lstm_data
+from src.models.train_model import sanitize_artifact_name
 
 
-def test_pyproject_toml_is_valid_and_contains_project_name():
-    """
-    Verifies that pyproject.toml exists, is a valid TOML file,
-    and contains the correct project name.
-    """
-    pyproject_path = "pyproject.toml"
-    assert os.path.isfile(pyproject_path), f"{pyproject_path} not found in the project root."
+# --- Test 1: Artifact Name Sanitization ---
+def test_sanitize_artifact_name():
+    """Test if invalid characters are replaced correctly."""
+    assert sanitize_artifact_name("Amazon.com") == "Amazon_com"
+    assert sanitize_artifact_name("Bitcoin/USD") == "Bitcoin_USD"
+    assert sanitize_artifact_name("NormalName") == "NormalName"
+    assert sanitize_artifact_name("Space Name") == "Space_Name"
 
-    try:
-        # 'rb' mode is required for tomllib.load()
-        with open(pyproject_path, "rb") as f:
-            data = tomllib.load(f)
 
-        # Check if the project name matches the expected name
-        project_name = data.get("project", {}).get("name")
-        expected_name = "crypto-stock-mlops-pipeline"
-        assert project_name == expected_name, (
-            f"Project name in {pyproject_path} is '{project_name}', but expected '{expected_name}'."
-        )
+# --- Test 2: LSTM Data Preparation ---
+def test_prepare_lstm_data():
+    """Test if data is correctly reshaped for LSTM input."""
+    # Create mock data: 100 days of prices
+    df = pd.DataFrame({"close": np.arange(100), "feature_2": np.arange(100) * 2})
 
-    except tomllib.TOMLDecodeError:
-        pytest.fail(f"{pyproject_path} is not a valid TOML file.")
-    except Exception as e:
-        pytest.fail(f"An error occurred while reading {pyproject_path}: {e}")
+    look_back = 10
+    X, y, scaler = prepare_lstm_data(
+        df, look_back=look_back, target_col="close", feature_cols=["close"]
+    )
+
+    # Check dimensions
+    # Total samples = 100 - 10 = 90
+    assert X.shape == (90, look_back, 1)  # [samples, time_steps, features]
+    assert y.shape == (90,)  # [samples]
+
+    # Check logic: y at index 0 should be price at index 10 (because look_back=10)
+    # Note: Data is scaled between 0-1, so we can't check exact values easily without inverse transform
+    # But we can check shapes and types
+    assert isinstance(X, np.ndarray)
+    assert isinstance(y, np.ndarray)
+
+
+# --- Test 3: Feature Engineering ---
+def test_create_time_series_features():
+    """Test if technical indicators are added without errors."""
+    # Create mock data enough for indicators (need > 50 rows for ma_50)
+    dates = pd.date_range(start="2023-01-01", periods=100, freq="D")
+    df = pd.DataFrame({"close": np.random.rand(100) * 100}, index=dates)
+
+    df_feat = create_time_series_features(df, target_col="close")
+
+    # Check if new columns exist
+    expected_columns = ["rsi", "macd", "bb_width", "ma_50", "log_return"]
+    for col in expected_columns:
+        assert col in df_feat.columns, f"Missing column: {col}"
+
+    # Check if NaN values are handled (first few rows will be NaN due to lags/rolling)
+    # The function itself returns NaNs, dropping them is done in process_asset
+    assert pd.isna(df_feat["ma_50"].iloc[0])  # First row MA should be NaN

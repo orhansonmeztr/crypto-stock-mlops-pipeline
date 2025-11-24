@@ -1,171 +1,165 @@
-import logging
 import os
+import sys
 from pathlib import Path
 
+# Fix Import Path
+project_root = Path(__file__).resolve().parents[2]
+sys.path.append(str(project_root))
+
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"  # 0=All, 1=Filter INFO, 2=Filter WARNING, 3=Filter ERROR
+import tensorflow as tf
+
+tf.get_logger().setLevel("ERROR")
+
+import logging
+
 import mlflow
+import mlflow.tensorflow
 import mlflow.xgboost
 import numpy as np
 import pandas as pd
 import yaml
 from dotenv import load_dotenv
+from mlflow.models.signature import infer_signature  # Eklendi
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 from xgboost import XGBRegressor
 
-# Load environment variables from .env file
+from src.models.lstm_model import create_lstm_model, prepare_lstm_data
+
 load_dotenv()
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
 def load_config(config_path: Path) -> dict:
-    """
-    Loads the YAML configuration file.
-
-    Args:
-        config_path (Path): Path to the configuration file.
-
-    Returns:
-        dict: Configuration dictionary.
-    """
     with open(config_path) as f:
         return yaml.safe_load(f)
 
 
 def sanitize_artifact_name(name: str) -> str:
-    """
-    Replaces invalid characters in the artifact name with underscores.
-    Allowed characters are alphanumeric, underscores, dashes, and spaces (though spaces are best avoided).
-    MLflow restriction: ('/', ':', '.', '%', '"', "'")
-
-    Args:
-        name (str): The original name (e.g., 'Amazon.com').
-
-    Returns:
-        str: Sanitized name (e.g., 'Amazon_com').
-    """
     for char in [".", ":", "/", "%", '"', "'", " "]:
         name = name.replace(char, "_")
     return name
 
 
-def train_model_for_asset(df_asset: pd.DataFrame, asset_name: str, config: dict):
-    """
-    Trains an XGBoost model for a specific asset using parameters from config.
+def train_hybrid_model_for_asset(df_asset: pd.DataFrame, asset_name: str, config: dict):
+    logging.info(f"Starting HYBRID training for {asset_name}...")
 
-    Args:
-        df_asset (pd.DataFrame): Dataframe containing features for a single asset.
-        asset_name (str): Name of the asset.
-        config (dict): Full configuration dictionary containing training and model params.
-    """
-    logging.info(f"Starting training for {asset_name}...")
+    # --- 1. LSTM ---
+    lstm_config = config["model_params"]["lstm"]
+    look_back = lstm_config.get("look_back", 60)
 
-    # Extract training parameters
+    X_lstm, y_lstm, scaler = prepare_lstm_data(
+        df_asset, look_back=look_back, target_col="close", feature_cols=["close"]
+    )
+
+    train_size = int(len(X_lstm) * 0.8)
+    X_lstm_train, X_lstm_test = X_lstm[:train_size], X_lstm[train_size:]
+    y_lstm_train, y_lstm_test = y_lstm[:train_size], y_lstm[train_size:]
+
+    with mlflow.start_run(run_name=f"train_{asset_name}_lstm", nested=True):
+        mlflow.log_params(lstm_config)
+
+        model_lstm = create_lstm_model(
+            input_shape=(X_lstm.shape[1], X_lstm.shape[2]),
+            units=lstm_config.get("units", 50),
+            dropout_rate=lstm_config.get("dropout", 0.2),
+            learning_rate=lstm_config.get("learning_rate", 0.001),
+        )
+
+        model_lstm.fit(
+            X_lstm_train,
+            y_lstm_train,
+            epochs=lstm_config.get("epochs", 10),
+            batch_size=lstm_config.get("batch_size", 32),
+            validation_data=(X_lstm_test, y_lstm_test),
+            verbose=0,
+        )
+
+        safe_name = sanitize_artifact_name(asset_name)
+
+        # FIX: Add Signature to Silence Warning
+        signature = infer_signature(X_lstm_train, model_lstm.predict(X_lstm_train, verbose=0))
+        mlflow.tensorflow.log_model(
+            model_lstm, artifact_path=f"model_lstm_{safe_name}", signature=signature
+        )
+
+        lstm_preds_scaled = model_lstm.predict(X_lstm, verbose=0)  # verbose=0 eklendi
+        lstm_preds = scaler.inverse_transform(lstm_preds_scaled)
+
+        logging.info(f"LSTM training finished for {asset_name}")
+
+    # --- 2. Hybrid ---
+    df_trimmed = df_asset.iloc[look_back:].copy()
+    df_trimmed["lstm_pred"] = lstm_preds.flatten()
+
     train_params = config["training"]
-    model_params = config["model_params"]["xgboost"]
+    xgb_params = config["model_params"]["xgboost"]
 
-    # Ensure reproducibility
-    random_state = train_params.get("random_state", 42)
-    model_params["random_state"] = random_state
-
-    # Split data into train and test (Time-series split based on ratio)
     test_ratio = train_params.get("test_size_ratio", 0.2)
-    split_idx = int(len(df_asset) * (1 - test_ratio))
+    split_idx = int(len(df_trimmed) * (1 - test_ratio))
 
-    train_df = df_asset.iloc[:split_idx]
-    test_df = df_asset.iloc[split_idx:]
+    train_df = df_trimmed.iloc[:split_idx]
+    test_df = df_trimmed.iloc[split_idx:]
 
-    # Define features and target
-    # Exclude non-feature columns
     exclude_cols = ["target", "asset_name", "asset_type", "close"]
-    feature_cols = [c for c in df_asset.columns if c not in exclude_cols]
+    feature_cols = [c for c in df_trimmed.columns if c not in exclude_cols]
 
     X_train = train_df[feature_cols]
     y_train = train_df["target"]
     X_test = test_df[feature_cols]
     y_test = test_df["target"]
 
-    # Start a nested MLflow run for this specific asset
-    with mlflow.start_run(run_name=f"train_{asset_name}", nested=True):
-        # Log parameters from config
-        mlflow.log_params(model_params)
-        mlflow.log_params(train_params)
-        mlflow.log_param("asset_name", asset_name)
-        mlflow.log_param("train_samples", len(train_df))
-        mlflow.log_param("test_samples", len(test_df))
+    with mlflow.start_run(run_name=f"train_{asset_name}_hybrid", nested=True):
+        mlflow.log_params(xgb_params)
+        mlflow.log_param("features", feature_cols)
 
-        # Initialize and train model
-        model = XGBRegressor(**model_params)
-        model.fit(X_train, y_train)
+        model_xgb = XGBRegressor(**xgb_params)
+        model_xgb.fit(X_train, y_train)
 
-        # Evaluate
-        predictions = model.predict(X_test)
+        predictions = model_xgb.predict(X_test)
         mae = mean_absolute_error(y_test, predictions)
+        rmse = np.sqrt(mean_squared_error(y_test, predictions))
 
-        # Calculate RMSE (using numpy due to sklearn version changes)
-        mse = mean_squared_error(y_test, predictions)
-        rmse = np.sqrt(mse)
-
-        logging.info(f"Model {asset_name} - MAE: {mae:.4f}, RMSE: {rmse:.4f}")
-
-        # Log metrics
+        logging.info(f"Hybrid Model {asset_name} - MAE: {mae:.4f}, RMSE: {rmse:.4f}")
         mlflow.log_metric("mae", mae)
         mlflow.log_metric("rmse", rmse)
 
-        # Log model with SANITIZED name
-        safe_model_name = f"model_{sanitize_artifact_name(asset_name)}"
-        mlflow.xgboost.log_model(model, artifact_path=safe_model_name)
+        # FIX: Add Signature for XGBoost too
+        signature_xgb = infer_signature(X_train, predictions)
+        mlflow.xgboost.log_model(
+            model_xgb, artifact_path=f"model_hybrid_{safe_name}", signature=signature_xgb
+        )
 
 
 def main():
-    """
-    Main function to execute batch training for all assets.
-    """
-    # Define paths
-    project_root = Path(__file__).resolve().parents[2]
+    # ... (Geri kalan kısım tamamen aynı) ...
     features_path = project_root / "data" / "features" / "multi_asset_features.csv"
     config_path = project_root / "configs" / "training_config.yaml"
 
-    # Load Config
-    if not config_path.exists():
-        logging.error(f"Config file not found: {config_path}")
-        return
-    config = load_config(config_path)
+    mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI")
+    if mlflow_tracking_uri:
+        mlflow.set_tracking_uri(mlflow_tracking_uri)
 
-    # Load Data
-    if not features_path.exists():
-        logging.error(f"Features file not found: {features_path}")
-        return
+    experiment_name = os.getenv("DATABRICKS_EXPERIMENT_PATH", "/Shared/crypto-stock-forecasting")
+    mlflow.set_experiment(experiment_name)
+
+    config = load_config(config_path)
 
     logging.info("Loading features data...")
     df = pd.read_csv(features_path, parse_dates=["timestamp"], index_col="timestamp")
-
-    # Get list of unique assets
     asset_names = df["asset_name"].unique()
-    logging.info(f"Found assets to train: {asset_names}")
 
-    # Setup MLflow Tracking URI
-    # Use environment variable or default to databricks if configured
-    mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "databricks")
-    mlflow.set_tracking_uri(mlflow_tracking_uri)
-    logging.info(f"MLflow Tracking URI: {mlflow_tracking_uri}")
-
-    # Setup Experiment
-    experiment_path = os.getenv("DATABRICKS_EXPERIMENT_PATH", "/Shared/crypto-stock-forecasting")
-    mlflow.set_experiment(experiment_path)
-    logging.info(f"MLflow Experiment: {experiment_path}")
-
-    # Start Parent Run
-    with mlflow.start_run(run_name="Batch_Training_All_Assets") as parent_run:
-        logging.info(f"Parent Run ID: {parent_run.info.run_id}")
-        mlflow.log_param("assets_count", len(asset_names))
-
-        # Loop through each asset and train using the config
+    with mlflow.start_run(run_name="Batch_Hybrid_Training"):
         for asset in asset_names:
-            asset_df = df[df["asset_name"] == asset]
-            train_model_for_asset(asset_df, asset, config)
-
-    logging.info("Batch training completed.")
+            try:
+                asset_df = df[df["asset_name"] == asset]
+                if len(asset_df) > config["model_params"]["lstm"]["look_back"] + 10:
+                    train_hybrid_model_for_asset(asset_df, asset, config)
+                else:
+                    logging.warning(f"Not enough data for {asset}, skipping.")
+            except Exception as e:
+                logging.error(f"Failed to train {asset}: {e}")
 
 
 if __name__ == "__main__":

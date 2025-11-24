@@ -86,3 +86,8 @@ Thumbs.db
 .coverage
 htmlcov/
 .tox/
+
+# Coverage reports
+htmlcov/
+.coverage
+.coverage.*

@@ -8,17 +8,6 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s",
 )
 
-# def clean_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-#     """Performs basic cleaning operations on a DataFrame."""
-#     # Make column names lowercase and replace special characters
-#     df.columns = df.columns.str.lower().str.replace('[^A-Za-z0-9_]+', '', regex=True)
-
-#     # Remove any completely empty rows or columns
-#     df.dropna(how='all', axis=0, inplace=True)
-#     df.dropna(how='all', axis=1, inplace=True)
-
-#     return df
-
 
 def clean_stock_column_names(df: pd.DataFrame) -> pd.DataFrame:
     """

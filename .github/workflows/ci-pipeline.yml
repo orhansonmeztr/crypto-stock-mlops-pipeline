@@ -1,38 +1,40 @@
-name: CI - Code Quality Checks
+name: CI Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ "main", "master" ]
   pull_request:
-    branches: [ main ]
+    branches: [ "main", "master" ]
 
 jobs:
-  code-quality:
+  quality-and-test:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        version: "latest"
 
-      - name: Cache pre-commit environments
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pre-commit
-          key: pre-commit-cache-${{ hashFiles('.pre-commit-config.yaml') }}
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
 
-      - name: Install dependencies using uv
-        run: |
-          pip install uv
-          uv venv
-          # Install dependencies specified in [project.optional-dependencies]
-          uv pip install ".[dev]"
+    - name: Install dependencies
+      run: |
+        uv sync --all-extras --dev
 
-      - name: Run pre-commit hooks
-        run: |
-          # Run the hooks inside the created virtual environment
-          uv run pre-commit run --all-files
+    - name: Run Pre-commit Hooks (Code Quality)
+      run: |
+        # Run pre-commit hooks within the uv environment
+        uv run pre-commit run --all-files
+
+    - name: Run Unit Tests
+      run: |
+        # Set PYTHONPATH to current directory to allow module imports during testing
+        export PYTHONPATH=$PYTHONPATH:.
+        uv run pytest tests/unit/test_initial.py

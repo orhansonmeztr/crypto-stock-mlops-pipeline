@@ -26,6 +26,8 @@ dependencies = [
     "kaggle>=1.7.4.5",
     "cryptography>=46.0.0",
     "pyOpenSSL>=25.0.0",
+    "tensorflow>=2.20.0",
+    "ta>=0.11.0",
 ]
 
 [project.optional-dependencies]
@@ -77,6 +79,9 @@ ignore = [
     "E501",  # line too long (handled by formatter)
     "B008",  # do not perform function calls in argument defaults
     "C901",  # too complex
+    "E402",  # Module level import not at top of file
+    "N806",  # Variable in function should be lowercase
+    "F841",  # Local variable is assigned to but never used
 ]
 
 # Allow autofix for all enabled rules

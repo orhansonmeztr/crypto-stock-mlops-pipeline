@@ -1,29 +1,44 @@
-# Configuration for asset selection and training parameters
 assets:
   stocks:
-    - "Amazon.com"
-    - "IBM"
-    - "NVIDIA"
+  - AMZN
+  - IBM
+  - NVDA
   cryptos:
-    - "Bitcoin"
-    - "Ethereum"
-    - "Solana"
+  - BTC-USD
+  - ETH-USD
+  - SOL-USD
 
 training:
-  test_size_ratio: 0.2
-  validation_folds: 5
-  forecast_horizon: 1
+  train_ratio: 0.6
+  validation_ratio: 0.2
+  test_ratio: 0.2
   random_state: 42
+  forecast_horizon: 1
+
+features:
+  # Reduced windows for short dataset (~26 days)
+  moving_averages: [3, 7, 14]
+  lags: [1, 2, 3]
+  rsi_window: 7
+  bollinger_window: 10
+  bollinger_dev: 2
+  volatility_window: 7
+  
+  # NEW: MACD parameters reduced for short history
+  # Default was 26/12/9 which killed all data
+  macd_slow: 12
+  macd_fast: 6
+  macd_signal: 3
 
 model_params:
   xgboost:
     n_estimators: 100
-    learning_rate: 0.1
-    max_depth: 5
-    objective: "reg:squarederror"
-
+    learning_rate: 0.05
+    max_depth: 6
+    objective: reg:squarederror
+    subsample: 0.8
   lstm:
-    look_back: 60
+    look_back: 10
     units: 50
     dropout: 0.2
     epochs: 20

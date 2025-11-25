@@ -30,11 +30,12 @@ jobs:
 
     - name: Run Pre-commit Hooks (Code Quality)
       run: |
-        # Run pre-commit hooks within the uv environment
-        uv run pre-commit run --all-files
+        # Run ruff check and format explicitly (pre-commit can be slow or flaky in CI sometimes)
+        uv run ruff check .
+        uv run ruff format --check .
 
     - name: Run Unit Tests
       run: |
-        # Set PYTHONPATH to current directory to allow module imports during testing
         export PYTHONPATH=$PYTHONPATH:.
-        uv run pytest tests/unit/test_initial.py
+        # Only run unit tests to avoid external dependency failures
+        uv run pytest tests/unit/

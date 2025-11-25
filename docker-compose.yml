@@ -11,5 +11,9 @@ services:
       - API_HOST=0.0.0.0
       - API_PORT=${API_PORT:-8000}
       - API_KEY=${API_KEY}
+      - DATABRICKS_CATALOG=${DATABRICKS_CATALOG:-workspace}
+      - DATABRICKS_SCHEMA=${DATABRICKS_SCHEMA:-default}
+      - MLFLOW_TRACKING_URI=${MLFLOW_TRACKING_URI:-databricks}
     volumes:
-      - ./data/predictions:/app/data/predictions
+      - ./src:/app/src
+      - ./configs:/app/configs

@@ -1,6 +1,8 @@
 name: CD - Model Training Pipeline
 
 on:
+  schedule:
+    - cron: '0 6 * * 1'  # Runs automatically every Monday at 06:00 UTC
   workflow_dispatch: # Allows manual triggering from GitHub Actions UI
 
 jobs:
@@ -34,13 +36,55 @@ jobs:
       run: |
         uv sync --frozen
 
-    - name: Configure DVC and Pull Data
-      run: |
-        # Remote configuration 's3-storage' exists in .dvc/config
-        # DVC automatically uses the AWS environment variables for authentication
-        uv run dvc pull
-
-    - name: Run Model Training Script
+    # --- Pre-Training Checks ---
+    - name: Run Unit Tests
       run: |
         export PYTHONPATH=$PYTHONPATH:.
-        uv run python src/models/train_model.py
+        uv run pytest tests/unit/
+
+    # --- Data Pipeline ---
+    - name: Configure DVC and Pull Data
+      run: |
+        uv run dvc pull
+
+    - name: Run Data Preprocessing
+      run: |
+        export PYTHONPATH=$PYTHONPATH:.
+        uv run python src/data/preprocess.py
+
+    - name: Run Data Validation
+      run: |
+        export PYTHONPATH=$PYTHONPATH:.
+        uv run python src/data/data_validation.py
+
+    - name: Run Feature Engineering
+      run: |
+        export PYTHONPATH=$PYTHONPATH:.
+        uv run python src/features/build_features.py
+
+    # --- Model Training ---
+    - name: Run Model Training
+      run: |
+        export PYTHONPATH=$PYTHONPATH:.
+        uv run python src/training/train.py
+
+    # --- Post-Training Validation ---
+    - name: Run Model Behavior Tests
+      run: |
+        export PYTHONPATH=$PYTHONPATH:.
+        uv run pytest tests/model_tests/
+
+    # --- Promote Model ---
+    - name: Promote Best Model
+      env:
+        DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+        DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+        MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      run: |
+        export PYTHONPATH=$PYTHONPATH:.
+        uv run python src/training/promote_model.py
+
+    # --- Push Updated Artifacts to DVC ---
+    - name: Push Artifacts to DVC
+      run: |
+        uv run dvc push

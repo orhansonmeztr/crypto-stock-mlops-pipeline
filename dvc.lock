@@ -1,0 +1,123 @@
+schema: '2.0'
+stages:
+  fetch_data:
+    cmd: python src/data/fetch_data.py
+    deps:
+    - path: src/data/fetch_data.py
+      hash: md5
+      md5: e33b04dd90ec20854f23fc4ebca54ab7
+      size: 4495
+      isexec: true
+    outs:
+    - path: data/raw
+      hash: md5
+      md5: f906caa0347a48c45a42a01ccda8cb1a.dir
+      size: 1089400
+      nfiles: 2
+  preprocess:
+    cmd: python src/data/preprocess.py
+    deps:
+    - path: data/raw
+      hash: md5
+      md5: f906caa0347a48c45a42a01ccda8cb1a.dir
+      size: 1089400
+      nfiles: 2
+    - path: src/data/preprocess.py
+      hash: md5
+      md5: 2dd7b590f62a92512fb8ec3db85b309d
+      size: 5455
+      isexec: true
+    outs:
+    - path: data/processed
+      hash: md5
+      md5: 622ba5ec644ac129187440a9466a9b76.dir
+      size: 1113737
+      nfiles: 2
+  validate_data:
+    cmd: python src/data/data_validation.py
+    deps:
+    - path: data/processed
+      hash: md5
+      md5: 622ba5ec644ac129187440a9466a9b76.dir
+      size: 1113737
+      nfiles: 2
+    - path: src/data/data_validation.py
+      hash: md5
+      md5: 4002f8dbc896e69a9c8116787b9135c8
+      size: 7106
+    params:
+      configs/training_config.yaml:
+        assets:
+          stocks:
+          - AMZN
+          - IBM
+          - NVDA
+          cryptos:
+          - BTC-USD
+          - ETH-USD
+          - SOL-USD
+  build_features:
+    cmd: python src/features/build_features.py
+    deps:
+    - path: configs/training_config.yaml
+      hash: md5
+      md5: 9e8daf81ef114e0c9ede29eed5b47e03
+      size: 841
+      isexec: true
+    - path: data/processed
+      hash: md5
+      md5: 622ba5ec644ac129187440a9466a9b76.dir
+      size: 1113737
+      nfiles: 2
+    - path: src/features/build_features.py
+      hash: md5
+      md5: a9d19efce343bb3422e8d0814b42c8cd
+      size: 6442
+      isexec: true
+    outs:
+    - path: data/features
+      hash: md5
+      md5: 17e46bcfa42aa723d2571cba4d7fe664.dir
+      size: 4070164
+      nfiles: 1
+  train:
+    cmd: python src/training/train.py
+    deps:
+    - path: configs/training_config.yaml
+      hash: md5
+      md5: 9e8daf81ef114e0c9ede29eed5b47e03
+      size: 841
+      isexec: true
+    - path: data/features
+      hash: md5
+      md5: 17e46bcfa42aa723d2571cba4d7fe664.dir
+      size: 4070164
+      nfiles: 1
+    - path: src/data/data_processor.py
+      hash: md5
+      md5: d974335e996bc407ab94e63000332d36
+      size: 2811
+      isexec: true
+    - path: src/models/hybrid_model.py
+      hash: md5
+      md5: 635d2a5e82ed07a74f3f013e2788a0d6
+      size: 2321
+      isexec: true
+    - path: src/models/lstm_model.py
+      hash: md5
+      md5: f5417efec5fb3b4113af23ce94bb3b6b
+      size: 2579
+      isexec: true
+    - path: src/models/xgboost_model.py
+      hash: md5
+      md5: 3a0268244af4b616f335ae1c73552ae0
+      size: 1322
+    - path: src/training/evaluate.py
+      hash: md5
+      md5: 6d8abd104fa37e7520045224b3cae0ba
+      size: 3619
+    - path: src/training/train.py
+      hash: md5
+      md5: 75e9eeaeb3b1fb58bc4cdf829a945d64
+      size: 9698
+      isexec: true

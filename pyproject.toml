@@ -1,6 +1,6 @@
 [build-system]
-requires = ["setuptools>=61.0"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [project]
 name = "crypto-stock-mlops-pipeline"
@@ -21,12 +21,16 @@ dependencies = [
     "python-dotenv>=1.2.1",
     "pyyaml>=6.0.3",
     "requests>=2.32.5",
-    "great-expectations>=1.9.0",
-    "kaggle>=1.7.4.5",
+    "yfinance>=0.2.40",
     "cryptography>=46.0.0",
     "pyOpenSSL>=25.0.0",
     "ta>=0.11.0",
     "tensorflow-cpu>=2.20.0",
+    "optuna>=4.6.0",
+    "pre-commit>=4.4.0",
+    "pytest-cov>=7.0.0",
+    "slowapi>=0.1.9",
+    "pip>=26.0.1",
 ]
 
 [project.optional-dependencies]
@@ -39,6 +43,9 @@ dev = [
     "ipykernel>=7.1.0",
     "jupyter>=1.1.1",
 ]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
 
 [tool.ruff]
 # Python 3.12 target
@@ -91,6 +98,7 @@ unfixable = []
 "__init__.py" = ["F401"]  # Allow unused imports in __init__.py
 "tests/**/*.py" = ["S101"]  # Allow assert in tests
 "src/models/train_model.py" = ["N806"]
+"src/models/tune.py" = ["N806"]
 
 [tool.ruff.format]
 # Use double quotes for strings
@@ -99,6 +107,7 @@ indent-style = "space"
 line-ending = "auto"
 
 [tool.pytest.ini_options]
+pythonpath = ["src"]
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"

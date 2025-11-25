@@ -1,0 +1,9 @@
+{
+    "lstm_units": 55,
+    "lstm_dropout": 0.1993766121069852,
+    "lstm_lr": 0.0017775546724216802,
+    "xgb_n_estimators": 244,
+    "xgb_max_depth": 3,
+    "xgb_lr": 0.1847453056168744,
+    "xgb_subsample": 0.769058639045806
+}

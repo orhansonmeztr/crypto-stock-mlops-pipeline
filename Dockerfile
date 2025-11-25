@@ -1,46 +1,61 @@
-# --- Stage 1: Builder (Install dependencies) ---
-FROM python:3.12-slim-bookworm AS builder
+# === Stage 1: Builder ===
+FROM python:3.12-slim AS builder
 
-# Install uv (The fast package manager)
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    UV_SYSTEM_PYTHON=1
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
-# Set working directory
 WORKDIR /app
 
-# Copy dependency files
+# Copy dependency files first to leverage Docker cache
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies into a virtual environment
-# --frozen ensures we use exact versions from uv.lock
-# --no-dev ensures we don't install test/dev tools in production
-RUN uv sync --frozen --no-dev
+# Install dependencies — outputs to system python
+RUN uv sync --frozen --no-install-project
 
-# --- Stage 2: Runner (Runtime environment) ---
-FROM python:3.12-slim-bookworm
+# Copy source code
+COPY . .
 
-# Create a non-root user for security
-RUN useradd -m appuser
-USER appuser
+# Install the project itself
+RUN uv pip install -e .
+
+
+# === Stage 2: Runtime ===
+FROM python:3.12-slim AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# Install runtime dependencies only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
-# Copy the virtual environment from the builder stage
-COPY --from=builder /app/.venv /app/.venv
+# Copy installed Python packages from builder
+COPY --from=builder /usr/local/lib/python3.12 /usr/local/lib/python3.12
+COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
-COPY src/ src/
-COPY data/predictions/ data/predictions/
-# Note: In a real scenario, data/predictions/ might be mounted as a volume,
-# but for this "Batch Serving" demo, we bake the CSV into the image.
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/configs ./configs
+COPY --from=builder /app/pyproject.toml ./pyproject.toml
 
-# Set environment variables
-ENV PATH="/app/.venv/bin:$PATH"
-ENV PYTHONPATH="/app"
-# Default API settings (can be overridden at runtime)
-ENV API_HOST="0.0.0.0"
-ENV API_PORT="8000"
-
-# Expose the port
+# Expose the port the app runs on
 EXPOSE 8000
 
-# Command to run the API
+# Healthcheck to ensure API is responsive
+HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
+  CMD curl -f http://localhost:8000/health || exit 1
+
+# Command to run the application
 CMD ["python", "src/api/run.py"]

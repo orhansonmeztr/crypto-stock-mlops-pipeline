@@ -1,0 +1,72 @@
+name: Monitor - Data Drift Check
+
+on:
+  schedule:
+    - cron: '0 9 * * *'   # Runs automatically every day at 09:00 UTC
+  workflow_dispatch:      # Allows manual triggering via GitHub UI
+
+jobs:
+  drift-check:
+    runs-on: ubuntu-latest
+    env:
+      # Credentials needed for DVC to pull data from S3
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+      MLFLOW_TRACKING_URI: ${{ secrets.MLFLOW_TRACKING_URI }}
+      DATABRICKS_EXPERIMENT_PATH: ${{ secrets.DATABRICKS_EXPERIMENT_PATH }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Pull Data with DVC
+        run: |
+          # Pull the latest dataset to check for drift against reference
+          uv run dvc pull
+
+      - name: Run Drift Analysis
+        run: |
+          export PYTHONPATH=$PYTHONPATH:.
+          # Execute the Evidently AI script to generate HTML/JSON reports
+          uv run python src/monitoring/drift_detection.py
+
+      - name: Upload Drift Reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: drift-reports
+          path: reports/monitoring/
+          if-no-files-found: warn   # Warns if reports weren't generated instead of failing silently
+
+      - name: Check for Drift Signal
+        id: check_drift
+        run: |
+          if [ -f drift_detected.txt ]; then
+            echo "Drift detected file found."
+            echo "drift=true" >> $GITHUB_OUTPUT
+          else
+            echo "No drift detected."
+            echo "drift=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Trigger Retraining
+        if: steps.check_drift.outputs.drift == 'true'
+        uses: benc-uk/workflow-dispatch@v1
+        with:
+          workflow: CD - Model Training Pipeline   # This should match the name field in train-model.yml
+          token: ${{ secrets.GITHUB_TOKEN }}

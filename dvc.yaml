@@ -1,0 +1,48 @@
+stages:
+  fetch_data:
+    cmd: python src/data/fetch_data.py
+    deps:
+      - src/data/fetch_data.py
+    outs:
+      - data/raw:
+          persist: true
+
+  preprocess:
+    cmd: python src/data/preprocess.py
+    deps:
+      - src/data/preprocess.py
+      - data/raw
+    outs:
+      - data/processed:
+          persist: true
+
+  validate_data:
+    cmd: python src/data/data_validation.py
+    deps:
+      - src/data/data_validation.py
+      - data/processed
+    params:
+      - configs/training_config.yaml:
+          - assets
+
+  build_features:
+    cmd: python src/features/build_features.py
+    deps:
+      - src/features/build_features.py
+      - data/processed
+      - configs/training_config.yaml
+    outs:
+      - data/features:
+          persist: true
+
+  train:
+    cmd: python src/training/train.py
+    deps:
+      - src/training/train.py
+      - src/training/evaluate.py
+      - src/models/lstm_model.py
+      - src/models/xgboost_model.py
+      - src/models/hybrid_model.py
+      - src/data/data_processor.py
+      - data/features
+      - configs/training_config.yaml

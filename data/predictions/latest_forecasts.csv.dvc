@@ -1,5 +1,0 @@
-outs:
-- md5: b6e6797d7066c021c1c2d4145b5984b4
-  size: 444
-  hash: md5
-  path: latest_forecasts.csv

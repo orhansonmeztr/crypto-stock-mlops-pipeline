@@ -2,35 +2,39 @@ import logging
 
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
-from tensorflow.keras.layers import LSTM, Dense, Dropout, Input
-from tensorflow.keras.models import Sequential
-from tensorflow.keras.optimizers import Adam
+from tensorflow.keras.layers import LSTM, Dense, Dropout, Input  # type: ignore
+from tensorflow.keras.models import Sequential  # type: ignore
+from tensorflow.keras.optimizers import Adam  # type: ignore
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 
-def create_lstm_model(input_shape, units=50, dropout_rate=0.2, learning_rate=0.001):
+def create_lstm_model(input_shape, units=50, dropout_rate=0.2, learning_rate=0.001, num_layers=2):
     """
-    Creates and compiles a Keras LSTM model.
+    Creates and compiles a multi-layer Keras LSTM model.
 
     Args:
         input_shape (tuple): (time_steps, features)
-        units (int): Number of LSTM units
+        units (int): Number of LSTM units per layer
         dropout_rate (float): Dropout rate
         learning_rate (float): Learning rate for Adam
+        num_layers (int): Number of LSTM layers (default: 2)
 
     Returns:
         tf.keras.Model: Compiled model
     """
-    model = Sequential(
-        [
-            Input(shape=input_shape),
-            LSTM(units, return_sequences=False),
-            Dropout(dropout_rate),
-            Dense(1),
-        ]
-    )
+    layers = [Input(shape=input_shape)]
+
+    for i in range(num_layers):
+        # return_sequences=True for all layers except the last
+        return_sequences = i < (num_layers - 1)
+        layers.append(LSTM(units, return_sequences=return_sequences))
+        layers.append(Dropout(dropout_rate))
+
+    layers.append(Dense(1))
+
+    model = Sequential(layers)
 
     optimizer = Adam(learning_rate=learning_rate)
     model.compile(optimizer=optimizer, loss="mean_squared_error")

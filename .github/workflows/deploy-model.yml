@@ -3,7 +3,7 @@ name: CD - Build & Push Docker Image
 on:
   push:
     tags:
-      - 'v0.1.0'
+      - 'v*'
 
 env:
   REGISTRY: ghcr.io

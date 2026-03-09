@@ -2,7 +2,7 @@ name: Monitor - Data Drift Check
 
 on:
   schedule:
-    - cron: '0 9 * * *'   # Runs automatically every day at 09:00 UTC
+    - cron: '17 9 * * *'   # Runs automatically every day at 09:17 UTC
   workflow_dispatch:      # Allows manual triggering via GitHub UI
 
 jobs:

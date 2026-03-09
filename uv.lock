@@ -933,6 +933,11 @@ dev = [
     { name = "ruff" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "seaborn" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "cryptography", specifier = ">=46.0.0" },
@@ -967,6 +972,9 @@ requires-dist = [
     { name = "yfinance", specifier = ">=0.2.40" },
 ]
 provides-extras = ["dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "seaborn", specifier = ">=0.13.2" }]
 
 [[package]]
 name = "cryptography"
@@ -5369,6 +5377,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/8b/d0/7201b0a95a738ab684eabe7453d02d2cab82e713f4976c644c1975143ba9/scmrepo-3.5.3.tar.gz", hash = "sha256:0683a30826533e773ddbc7bfe4e540aa46f53ba09631d8683fa7a1cdc3d4242c", size = 96835, upload-time = "2025-11-11T04:54:36.519Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/83/de/5ee87bc02f1fcd10fcb12c1b724494dcf41714e961f9e61cb6e12a9ecfda/scmrepo-3.5.3-py3-none-any.whl", hash = "sha256:864d78cb7140e036d739d678c547fd2cac143b2f177eb23e8d05e757d260c1b8", size = 74082, upload-time = "2025-11-11T04:54:34.611Z" },
+]
+
+[[package]]
+name = "seaborn"
+version = "0.13.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pandas" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/86/59/a451d7420a77ab0b98f7affa3a1d78a313d2f7281a57afb1a34bae8ab412/seaborn-0.13.2.tar.gz", hash = "sha256:93e60a40988f4d65e9f4885df477e2fdaff6b73a9ded434c1ab356dd57eefff7", size = 1457696, upload-time = "2024-01-25T13:21:52.551Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/11/00d3c3dfc25ad54e731d91449895a79e4bf2384dc3ac01809010ba88f6d5/seaborn-0.13.2-py3-none-any.whl", hash = "sha256:636f8336facf092165e27924f223d3c62ca560b1f2bb5dff7ab7fad265361987", size = 294914, upload-time = "2024-01-25T13:21:49.598Z" },
 ]
 
 [[package]]

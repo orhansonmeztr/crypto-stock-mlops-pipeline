@@ -1,6 +1,6 @@
 # Crypto & Stock Price Prediction MLOps Pipeline
 
-[![CI Pipeline](https://img.shields.io/github/actions/workflow/status/orhansonmeztr/crypto-stock-mlops-pipeline/ci-pipeline.yml?branch=main&label=CI%20Pipeline&logo=github)](https://github.com/orhansonmeztr/crypto-stock-mlops-pipeline/actions/workflows/ci-pipeline.yml)
+[![CI Pipeline](https://github.com/orhansonmeztr/crypto-stock-mlops-pipeline/actions/workflows/ci-pipeline.yml/badge.svg)](https://github.com/orhansonmeztr/crypto-stock-mlops-pipeline/actions/workflows/ci-pipeline.yml)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 [![MLflow](https://img.shields.io/badge/MLflow-Tracking-blue)](https://mlflow.org/)
@@ -167,6 +167,22 @@ docker-compose up --build
 Access the API docs at:
 - Swagger UI: http://127.0.0.1:8000/docs
 - Health check: http://127.0.0.1:8000/health
+
+### 4. Running in AWS ECS (Cloud)
+
+When the CI/CD pipeline automatically deploys the Docker image to AWS ECS, the `.env` file is intentionally excluded to prevent credential leakage. To allow the cloud container to connect to Databricks MLflow and enforce API security, you **must manually inject these environment variables** into your ECS Task Definition:
+
+1. Go to **AWS Console > ECS > Task Definitions**.
+2. Select the `crypto-stock-api` task definition and click **Create new revision**.
+3. Scroll down to the Container configuration, find the **Environment variables** section.
+4. Add the following keys and their exact values from your local `.env` file:
+   - `DATABRICKS_HOST`
+   - `DATABRICKS_TOKEN`
+   - `MLFLOW_TRACKING_URI` (e.g., `databricks`)
+   - `API_KEY` (your secure secret password)
+5. **Update** and **Create** the revision, then go to your ECS cluster and **Update Service** to deploy the newly created revision.
+
+*Note: You may also need to check your AWS Security Group's Inbound Rules to ensure `Port 8000` is open to the public (`0.0.0.0/0`) if you are not using a Load Balancer.*
 
 ## Pipeline Usage
 

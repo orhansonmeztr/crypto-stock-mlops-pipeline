@@ -2,7 +2,7 @@ name: CD - Model Training Pipeline
 
 on:
   schedule:
-    - cron: '0 6 * * 1'  # Runs automatically every Monday at 06:00 UTC
+    - cron: '17 6 * * 1'  # Runs automatically every Monday at 06:17 UTC
   workflow_dispatch: # Allows manual triggering from GitHub Actions UI
 
 jobs:

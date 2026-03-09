@@ -2,12 +2,14 @@ name: Monitor - Data Drift Check
 
 on:
   schedule:
-    - cron: '17 9 * * *'   # Runs automatically every day at 09:17 UTC
+    - cron: '17 10 * * *'   # Runs automatically every day at 10:17 UTC
   workflow_dispatch:      # Allows manual triggering via GitHub UI
 
 jobs:
   drift-check:
     runs-on: ubuntu-latest
+    permissions:
+      actions: write
     env:
       # Credentials needed for DVC to pull data from S3
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
